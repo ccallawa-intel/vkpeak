@@ -1942,6 +1942,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
     // start with little works
     int invocation_count = std::max(max_invocation_count / 32, 8);
     int loop = 16;
+    int loop_multiplications = 0;
 
     bool rerun = true;
 
@@ -2189,6 +2190,8 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
                 double time = t1 - t0;
 
+                fprintf(stderr, "[vkpeak] pass single time=%.3f ms loop=%d loop_multiplications=%d invocation_count=%d\n", time, loop, loop_multiplications, invocation_count);
+
                 if (time < 300)
                 {
                     // for fast device
@@ -2199,6 +2202,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     else
                     {
                         loop *= 2;
+                        loop_multiplications += 1;
                     }
                     rerun = true;
                     break;
@@ -2217,6 +2221,8 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
                 double time_dual = t1 - t0;
 
+                fprintf(stderr, "[vkpeak] pass dual   time=%.3f ms loop=%d loop_multiplications=%d invocation_count=%d\n", time_dual, loop, loop_multiplications, invocation_count);
+
                 if (time_dual < 300)
                 {
                     // for fast device
@@ -2227,6 +2233,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     else
                     {
                         loop *= 2;
+                        loop_multiplications += 1;
                     }
                     rerun = true;
                     break;
