@@ -1941,6 +1941,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
     double max_gflops = 0;
 
+    bool enable_dual = false;
     const bool disable_probing = fixed_loop > 0 || fixed_invocation_count > 0;
 
     // start with little works
@@ -1978,17 +1979,23 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
             // -1 for omit the tail '\0'
             std::vector<uint32_t> spirv;
             std::vector<uint32_t> spirv_dual;
+            auto compile_spirv_dual = [&](const char* data, size_t data_size, std::vector<uint32_t>& out) {
+                if (enable_dual)
+                {
+                    ncnn::compile_spirv_module(data, data_size, opt, out);
+                }
+            };
             if (arithmetic_type == 2)
             {
                 if (packing_type == 1)
                 {
                     ncnn::compile_spirv_module(glsl_fp64_p1_data, sizeof(glsl_fp64_p1_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_fp64_p1_dual_data, sizeof(glsl_fp64_p1_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_fp64_p1_dual_data, sizeof(glsl_fp64_p1_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_fp64_p4_data, sizeof(glsl_fp64_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_fp64_p4_dual_data, sizeof(glsl_fp64_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_fp64_p4_dual_data, sizeof(glsl_fp64_p4_dual_data) - 1, spirv_dual);
                 }
             }
             else if (arithmetic_type == 3)
@@ -1996,12 +2003,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 if (packing_type == 1)
                 {
                     ncnn::compile_spirv_module(glsl_int32_p1_data, sizeof(glsl_int32_p1_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int32_p1_dual_data, sizeof(glsl_int32_p1_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int32_p1_dual_data, sizeof(glsl_int32_p1_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_int32_p4_data, sizeof(glsl_int32_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int32_p4_dual_data, sizeof(glsl_int32_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int32_p4_dual_data, sizeof(glsl_int32_p4_dual_data) - 1, spirv_dual);
                 }
             }
             else if (arithmetic_type == 4)
@@ -2009,12 +2016,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 if (packing_type == 1)
                 {
                     ncnn::compile_spirv_module(glsl_int16_p1_data, sizeof(glsl_int16_p1_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int16_p1_dual_data, sizeof(glsl_int16_p1_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int16_p1_dual_data, sizeof(glsl_int16_p1_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_int16_p4_data, sizeof(glsl_int16_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int16_p4_dual_data, sizeof(glsl_int16_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int16_p4_dual_data, sizeof(glsl_int16_p4_dual_data) - 1, spirv_dual);
                 }
             }
             else if (arithmetic_type == 5)
@@ -2022,12 +2029,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 if (packing_type == 1)
                 {
                     ncnn::compile_spirv_module(glsl_int64_p1_data, sizeof(glsl_int64_p1_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int64_p1_dual_data, sizeof(glsl_int64_p1_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int64_p1_dual_data, sizeof(glsl_int64_p1_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_int64_p4_data, sizeof(glsl_int64_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int64_p4_dual_data, sizeof(glsl_int64_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int64_p4_dual_data, sizeof(glsl_int64_p4_dual_data) - 1, spirv_dual);
                 }
             }
             else if (arithmetic_type == 6)
@@ -2035,7 +2042,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_int8_p4_data, sizeof(glsl_int8_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int8_p4_dual_data, sizeof(glsl_int8_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int8_p4_dual_data, sizeof(glsl_int8_p4_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 256)
                 {
@@ -2047,7 +2054,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     specializations[4].i = SCOPE;
 
                     ncnn::compile_spirv_module(glsl_int8_matrix_data, sizeof(glsl_int8_matrix_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_int8_matrix_dual_data, sizeof(glsl_int8_matrix_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_int8_matrix_dual_data, sizeof(glsl_int8_matrix_dual_data) - 1, spirv_dual);
                 }
             }
             else if (arithmetic_type == 7)
@@ -2055,7 +2062,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_bf16_p4_data, sizeof(glsl_bf16_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_bf16_p4_dual_data, sizeof(glsl_bf16_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_bf16_p4_dual_data, sizeof(glsl_bf16_p4_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 256)
                 {
@@ -2069,12 +2076,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     if (use_bf16_fp32_matrix)
                     {
                         ncnn::compile_spirv_module(glsl_bf16_fp32_matrix_data, sizeof(glsl_bf16_fp32_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_bf16_fp32_matrix_dual_data, sizeof(glsl_bf16_fp32_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_bf16_fp32_matrix_dual_data, sizeof(glsl_bf16_fp32_matrix_dual_data) - 1, spirv_dual);
                     }
                     else
                     {
                         ncnn::compile_spirv_module(glsl_bf16_matrix_data, sizeof(glsl_bf16_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_bf16_matrix_dual_data, sizeof(glsl_bf16_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_bf16_matrix_dual_data, sizeof(glsl_bf16_matrix_dual_data) - 1, spirv_dual);
                     }
                 }
             }
@@ -2092,12 +2099,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     if (use_fp8_fp32_matrix)
                     {
                         ncnn::compile_spirv_module(glsl_fp8_fp32_matrix_data, sizeof(glsl_fp8_fp32_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_fp8_fp32_matrix_dual_data, sizeof(glsl_fp8_fp32_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_fp8_fp32_matrix_dual_data, sizeof(glsl_fp8_fp32_matrix_dual_data) - 1, spirv_dual);
                     }
                     else
                     {
                         ncnn::compile_spirv_module(glsl_fp8_fp16_matrix_data, sizeof(glsl_fp8_fp16_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_fp8_fp16_matrix_dual_data, sizeof(glsl_fp8_fp16_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_fp8_fp16_matrix_dual_data, sizeof(glsl_fp8_fp16_matrix_dual_data) - 1, spirv_dual);
                     }
                 }
             }
@@ -2115,12 +2122,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     if (use_fp8_fp32_matrix)
                     {
                         ncnn::compile_spirv_module(glsl_bf8_fp32_matrix_data, sizeof(glsl_bf8_fp32_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_bf8_fp32_matrix_dual_data, sizeof(glsl_bf8_fp32_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_bf8_fp32_matrix_dual_data, sizeof(glsl_bf8_fp32_matrix_dual_data) - 1, spirv_dual);
                     }
                     else
                     {
                         ncnn::compile_spirv_module(glsl_bf8_fp16_matrix_data, sizeof(glsl_bf8_fp16_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_bf8_fp16_matrix_dual_data, sizeof(glsl_bf8_fp16_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_bf8_fp16_matrix_dual_data, sizeof(glsl_bf8_fp16_matrix_dual_data) - 1, spirv_dual);
                     }
                 }
             }
@@ -2129,12 +2136,12 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 if (packing_type == 1)
                 {
                     ncnn::compile_spirv_module(glsl_p1_data, sizeof(glsl_p1_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_p1_dual_data, sizeof(glsl_p1_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_p1_dual_data, sizeof(glsl_p1_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 4)
                 {
                     ncnn::compile_spirv_module(glsl_p4_data, sizeof(glsl_p4_data) - 1, opt, spirv);
-                    ncnn::compile_spirv_module(glsl_p4_dual_data, sizeof(glsl_p4_dual_data) - 1, opt, spirv_dual);
+                    compile_spirv_dual(glsl_p4_dual_data, sizeof(glsl_p4_dual_data) - 1, spirv_dual);
                 }
                 if (packing_type == 256)
                 {
@@ -2148,18 +2155,22 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     if (use_fp16_fp32_matrix)
                     {
                         ncnn::compile_spirv_module(glsl_fp16_fp32_matrix_data, sizeof(glsl_fp16_fp32_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_fp16_fp32_matrix_dual_data, sizeof(glsl_fp16_fp32_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_fp16_fp32_matrix_dual_data, sizeof(glsl_fp16_fp32_matrix_dual_data) - 1, spirv_dual);
                     }
                     else
                     {
                         ncnn::compile_spirv_module(glsl_fp16_matrix_data, sizeof(glsl_fp16_matrix_data) - 1, opt, spirv);
-                        ncnn::compile_spirv_module(glsl_fp16_matrix_dual_data, sizeof(glsl_fp16_matrix_dual_data) - 1, opt, spirv_dual);
+                        compile_spirv_dual(glsl_fp16_matrix_dual_data, sizeof(glsl_fp16_matrix_dual_data) - 1, spirv_dual);
                     }
                 }
             }
 
             int ret0 = pipeline.create(spirv.data(), spirv.size() * 4, specializations);
-            int ret1 = pipeline_dual.create(spirv_dual.data(), spirv_dual.size() * 4, specializations);
+            int ret1 = 0;
+            if (enable_dual)
+            {
+                ret1 = pipeline_dual.create(spirv_dual.data(), spirv_dual.size() * 4, specializations);
+            }
             if (ret0 != 0 || ret1 != 0)
             {
                 vkdev->reclaim_blob_allocator(allocator);
@@ -2185,7 +2196,10 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                 dispatcher.h = 1;
                 dispatcher.c = 1;
                 cmd.record_pipeline(&pipeline, bindings, constants, dispatcher);
-                cmd_dual.record_pipeline(&pipeline_dual, bindings, constants, dispatcher);
+                if (enable_dual)
+                {
+                    cmd_dual.record_pipeline(&pipeline_dual, bindings, constants, dispatcher);
+                }
             }
 
             // time this
@@ -2221,35 +2235,39 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
                     break;
                 }
 
-                t0 = ncnn::get_current_time();
-
-                ret = cmd_dual.submit_and_wait();
-                if (ret != 0)
+                double time_dual = time;
+                if (enable_dual)
                 {
-                    vkdev->reclaim_blob_allocator(allocator);
-                    return 0;
-                }
+                    t0 = ncnn::get_current_time();
 
-                t1 = ncnn::get_current_time();
-
-                double time_dual = t1 - t0;
-
-                fprintf(stderr, "[vkpeak] pass dual   time=%.3f ms loop=%d loop_multiplications=%d invocation_count=%d\n", time_dual, loop, loop_multiplications, invocation_count);
-
-                if (!disable_probing && time_dual < 300)
-                {
-                    // for fast device
-                    if (invocation_count * 2 <= max_invocation_count)
+                    ret = cmd_dual.submit_and_wait();
+                    if (ret != 0)
                     {
-                        invocation_count = std::min(invocation_count * 2, max_invocation_count);
+                        vkdev->reclaim_blob_allocator(allocator);
+                        return 0;
                     }
-                    else
+
+                    t1 = ncnn::get_current_time();
+
+                    time_dual = t1 - t0;
+
+                    fprintf(stderr, "[vkpeak] pass dual   time=%.3f ms loop=%d loop_multiplications=%d invocation_count=%d\n", time_dual, loop, loop_multiplications, invocation_count);
+
+                    if (!disable_probing && time_dual < 300)
                     {
-                        loop *= 2;
-                        loop_multiplications += 1;
+                        // for fast device
+                        if (invocation_count * 2 <= max_invocation_count)
+                        {
+                            invocation_count = std::min(invocation_count * 2, max_invocation_count);
+                        }
+                        else
+                        {
+                            loop *= 2;
+                            loop_multiplications += 1;
+                        }
+                        rerun = true;
+                        break;
                     }
-                    rerun = true;
-                    break;
                 }
 
                 double gflops;
@@ -2268,25 +2286,28 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
                     gflops = mac / time / 1000000;
                 }
-                double gflops_dual;
+                if (enable_dual)
                 {
-                    // dual issue is faster
-                    double mac = (double)invocation_count * ((double)loop * 16 * 2 + 1); // +1 for the tail c0+c1
-
-                    if (packing_type == 256)
+                    double gflops_dual;
                     {
-                        mac *= M * N * K;
-                        mac /= local_size_x;
-                    }
-                    else
-                    {
-                        mac *= packing_type;
+                        // dual issue is faster
+                        double mac = (double)invocation_count * ((double)loop * 16 * 2 + 1); // +1 for the tail c0+c1
+
+                        if (packing_type == 256)
+                        {
+                            mac *= M * N * K;
+                            mac /= local_size_x;
+                        }
+                        else
+                        {
+                            mac *= packing_type;
+                        }
+
+                        gflops_dual = mac / time_dual / 1000000;
                     }
 
-                    gflops_dual = mac / time_dual / 1000000;
+                    gflops = std::max(gflops, gflops_dual);
                 }
-
-                gflops = std::max(gflops, gflops_dual);
 
                 // fprintf(stderr, "%f gflops\n", gflops);
 
