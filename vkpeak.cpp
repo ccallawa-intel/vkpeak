@@ -5,6 +5,8 @@
 #include <gpu.h>
 #include <mat.h>
 
+#include <cstdlib>
+#include <cstring>
 #include <cerrno>
 #include <limits>
 #include <set>
@@ -1468,7 +1470,7 @@ void main()
 }
 )";
 
-static double vkpeak(int device_id, int storage_type, int arithmetic_type, int packing_type)
+static double vkpeak(int device_id, int storage_type, int arithmetic_type, int packing_type, int fixed_loop, int fixed_invocation_count)
 {
     ncnn::VulkanDevice* vkdev = ncnn::get_gpu_device(device_id);
 
@@ -1939,10 +1941,21 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
     double max_gflops = 0;
 
+    const bool disable_probing = fixed_loop > 0 || fixed_invocation_count > 0;
+
     // start with little works
-    int invocation_count = std::max(max_invocation_count / 32, 8);
-    int loop = 16;
+    int invocation_count = fixed_invocation_count > 0 ? fixed_invocation_count : std::max(max_invocation_count / 32, 8);
+    int loop = fixed_loop > 0 ? fixed_loop : 16;
     int loop_multiplications = 0;
+
+    invocation_count = std::max(invocation_count, 1);
+    invocation_count = std::min(invocation_count, max_invocation_count);
+    if (packing_type != 256)
+    {
+        // make invocation_count be multiple of local_size_x
+        invocation_count = std::max(invocation_count / local_size_x, 1) * local_size_x;
+        invocation_count = std::min(invocation_count, max_invocation_count);
+    }
 
     bool rerun = true;
 
@@ -2192,7 +2205,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
                 fprintf(stderr, "[vkpeak] pass single time=%.3f ms loop=%d loop_multiplications=%d invocation_count=%d\n", time, loop, loop_multiplications, invocation_count);
 
-                if (time < 300)
+                if (!disable_probing && time < 300)
                 {
                     // for fast device
                     if (invocation_count * 2 <= max_invocation_count)
@@ -2223,7 +2236,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
 
                 fprintf(stderr, "[vkpeak] pass dual   time=%.3f ms loop=%d loop_multiplications=%d invocation_count=%d\n", time_dual, loop, loop_multiplications, invocation_count);
 
-                if (time_dual < 300)
+                if (!disable_probing && time_dual < 300)
                 {
                     // for fast device
                     if (invocation_count * 2 <= max_invocation_count)
@@ -2577,9 +2590,36 @@ static void print_available_scenarios(const benchmark_scenario_t* scenarios, siz
 
 static void print_usage(const char* prog, const benchmark_scenario_t* scenarios, size_t scenario_count)
 {
-    fprintf(stderr, "Usage: %s [device_id] [scenario|scenario1,scenario2,...]\n", prog);
-    fprintf(stderr, "       %s [scenario|scenario1,scenario2,...]\n", prog);
+    fprintf(stderr, "Usage: %s [options] [device_id] [scenario|scenario1,scenario2,...]\n", prog);
+    fprintf(stderr, "       %s [options] [scenario|scenario1,scenario2,...]\n", prog);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --loop <count>                   Fixed shader loop count (>0)\n");
+    fprintf(stderr, "  --invocation-count <count>       Fixed invocation count (>0)\n");
+    fprintf(stderr, "  --invocations <count>            Alias of --invocation-count\n");
+    fprintf(stderr, "  -h, --help                       Show this help\n");
     print_available_scenarios(scenarios, scenario_count);
+}
+
+static bool parse_positive_int_arg(const char* option, const char* value, int& out)
+{
+    if (!value || value[0] == '\0')
+    {
+        fprintf(stderr, "Missing value for %s\n", option);
+        return false;
+    }
+
+    char* endptr = 0;
+    errno = 0;
+    long parsed = strtol(value, &endptr, 10);
+
+    if (endptr == value || *endptr != '\0' || errno == ERANGE || parsed <= 0 || parsed > std::numeric_limits<int>::max())
+    {
+        fprintf(stderr, "Invalid value for %s: %s\n", option, value);
+        return false;
+    }
+
+    out = (int)parsed;
+    return true;
 }
 
 int main(int argc, char** argv)
@@ -2628,7 +2668,66 @@ int main(int argc, char** argv)
     };
     const size_t scenario_count = sizeof(scenarios) / sizeof(scenarios[0]);
 
-    if (argc > 3)
+    int fixed_loop = -1;
+    int fixed_invocation_count = -1;
+
+    std::vector<const char*> positional_args;
+    for (int i = 1; i < argc; i++)
+    {
+        const char* arg = argv[i];
+
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0)
+        {
+            print_usage(argv[0], scenarios, scenario_count);
+            return 0;
+        }
+
+        if (strncmp(arg, "--loop=", 7) == 0)
+        {
+            if (!parse_positive_int_arg("--loop", arg + 7, fixed_loop))
+                return -1;
+
+            continue;
+        }
+
+        if (strcmp(arg, "--loop") == 0)
+        {
+            if (i + 1 >= argc || !parse_positive_int_arg("--loop", argv[i + 1], fixed_loop))
+                return -1;
+
+            i++;
+            continue;
+        }
+
+        if (strncmp(arg, "--invocation-count=", 19) == 0)
+        {
+            if (!parse_positive_int_arg("--invocation-count", arg + 19, fixed_invocation_count))
+                return -1;
+
+            continue;
+        }
+
+        if (strncmp(arg, "--invocations=", 14) == 0)
+        {
+            if (!parse_positive_int_arg("--invocations", arg + 14, fixed_invocation_count))
+                return -1;
+
+            continue;
+        }
+
+        if (strcmp(arg, "--invocation-count") == 0 || strcmp(arg, "--invocations") == 0)
+        {
+            if (i + 1 >= argc || !parse_positive_int_arg(arg, argv[i + 1], fixed_invocation_count))
+                return -1;
+
+            i++;
+            continue;
+        }
+
+        positional_args.push_back(arg);
+    }
+
+    if (positional_args.size() > 2)
     {
         print_usage(argv[0], scenarios, scenario_count);
         return -1;
@@ -2647,32 +2746,32 @@ int main(int argc, char** argv)
     int device_id = 0;
     const char* scenario_arg_ptr = 0;
 
-    if (argc >= 2)
+    if (!positional_args.empty())
     {
         char* endptr = 0;
         errno = 0;
-        long parsed_device_id = strtol(argv[1], &endptr, 10);
-        if (*argv[1] != '\0' && endptr && *endptr == '\0')
+        long parsed_device_id = strtol(positional_args[0], &endptr, 10);
+        if (*positional_args[0] != '\0' && endptr && *endptr == '\0')
         {
             /* try to parse first argument as device id */
             if (errno == ERANGE || parsed_device_id < std::numeric_limits<int>::min() || parsed_device_id > std::numeric_limits<int>::max())
             {
-                fprintf(stderr, "Invalid device_id %s\n", argv[1]);
+                fprintf(stderr, "Invalid device_id %s\n", positional_args[0]);
                 ncnn::destroy_gpu_instance();
                 return -1;
             }
 
             device_id = (int)parsed_device_id;
-            if (argc == 3)
+            if (positional_args.size() == 2)
             {
-                scenario_arg_ptr = argv[2];
+                scenario_arg_ptr = positional_args[1];
             }
         }
         else
         {
             /* parse first argument as scenario list specifier */
-            scenario_arg_ptr = argv[1];
-            if (argc >= 3)
+            scenario_arg_ptr = positional_args[0];
+            if (positional_args.size() >= 2)
             {
                 /* extra, invalid arguments supplied; program cannot continue */
                 print_usage(argv[0], scenarios, scenario_count);
@@ -2698,6 +2797,14 @@ int main(int argc, char** argv)
 
     fprintf(stderr, "device       = %s\n", ncnn::get_gpu_info(device_id).device_name());
     fprintf(stderr, "driver       = %s\n", get_gpu_driver_info(device_id).c_str());
+    if (fixed_loop > 0)
+    {
+        fprintf(stderr, "fixed loop   = %d\n", fixed_loop);
+    }
+    if (fixed_invocation_count > 0)
+    {
+        fprintf(stderr, "fixed invoke = %d\n", fixed_invocation_count);
+    }
 
     std::set<std::string> selected_scenarios;
     if (scenario_arg_ptr)
@@ -2759,7 +2866,7 @@ int main(int argc, char** argv)
         if (!selected_scenarios.empty() && selected_scenarios.count(scenario.name) == 0)
             continue;
 
-        const double score = scenario.is_copy ? vkpeak_copy(device_id, scenario.arg0, scenario.arg1) : vkpeak(device_id, scenario.arg0, scenario.arg1, scenario.arg2);
+        const double score = scenario.is_copy ? vkpeak_copy(device_id, scenario.arg0, scenario.arg1) : vkpeak(device_id, scenario.arg0, scenario.arg1, scenario.arg2, fixed_loop, fixed_invocation_count);
         fprintf(stdout, "%-12s = %.2f %s\n", scenario.name, score, scenario.unit);
     }
 
