@@ -2361,66 +2361,31 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
     }
 
     double max_gbps = 0;
-    const double target_time_ms = 1500.0;
-    const double min_time_ms = 1000.0;
-    const int max_batch_repeat = 1 << 20;
-    const char* copy_case = (from_type == 0 && to_type == 0) ? "h2h" :
-                            (from_type == 0 && to_type == 1) ? "h2d" :
-                            (from_type == 1 && to_type == 0) ? "d2h" : "d2d";
-
-    auto log_copy_probe = [&](int pass, int step, int repeat, double elapsed_ms, bool done) {
-        fprintf(stderr, "[vkpeak] copy probe %s pass=%d step=%d repeat=%d time=%.3f ms%s\n",
-                copy_case, pass, step, repeat, elapsed_ms, done ? " final" : "");
-    };
 
     if (from_type == 0 && to_type == 0)
     {
         ncnn::Mat a(1, buffer_size, 1);
         ncnn::Mat b(1, buffer_size, 1);
 
-        const int cmd_loop = 3;
+        const int cmd_loop = 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
             // reset cache
             memset(a, 0, buffer_size);
 
-            int batch_repeat = 1;
-            double time = 0.f;
-            int probe_step = 0;
-            while (1)
-            {
-                // time this batch
-                double t0 = ncnn::get_current_time();
+            ncnn::sleep(100);
 
-                for (int j = 0; j < batch_repeat; j++)
-                {
-                    memcpy(b, a, buffer_size);
-                }
+            // time this
+            double t0 = ncnn::get_current_time();
 
-                double t1 = ncnn::get_current_time();
+            memcpy(b, a, buffer_size);
 
-                time = t1 - t0;
-                probe_step++;
-                bool done = time >= min_time_ms || batch_repeat >= max_batch_repeat;
-                log_copy_probe(i + 1, probe_step, batch_repeat, time, done);
-                if (done)
-                    break;
+            double t1 = ncnn::get_current_time();
 
-                if (time > 0.0)
-                {
-                    int next_repeat = (int)((target_time_ms / time) * batch_repeat);
-                    batch_repeat = std::max(batch_repeat + 1, next_repeat);
-                }
-                else
-                {
-                    batch_repeat *= 4;
-                }
+            double time = t1 - t0;
 
-                batch_repeat = std::min(batch_repeat, max_batch_repeat);
-            }
-
-            double gbps = (double)buffer_size * batch_repeat / time / 1000000;
+            double gbps = buffer_size / time / 1000000;
 
             // fprintf(stderr, "%f gbps\n", gbps);
 
@@ -2436,7 +2401,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = 3;
+        const int cmd_loop = 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2444,43 +2409,20 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
             memset(hostptr, 0, buffer_size);
             staging_allocator->invalidate(devbuf.data);
 
-            int batch_repeat = 1;
-            double time = 0.f;
-            int probe_step = 0;
-            while (1)
-            {
-                // time this batch
-                double t0 = ncnn::get_current_time();
+            ncnn::sleep(100);
 
-                for (int j = 0; j < batch_repeat; j++)
-                {
-                    memcpy(devptr, hostptr, buffer_size);
-                    staging_allocator->flush(devbuf.data);
-                }
+            // time this
+            double t0 = ncnn::get_current_time();
 
-                double t1 = ncnn::get_current_time();
+            memcpy(devptr, hostptr, buffer_size);
 
-                time = t1 - t0;
-                probe_step++;
-                bool done = time >= min_time_ms || batch_repeat >= max_batch_repeat;
-                log_copy_probe(i + 1, probe_step, batch_repeat, time, done);
-                if (done)
-                    break;
+            staging_allocator->flush(devbuf.data);
 
-                if (time > 0.0)
-                {
-                    int next_repeat = (int)((target_time_ms / time) * batch_repeat);
-                    batch_repeat = std::max(batch_repeat + 1, next_repeat);
-                }
-                else
-                {
-                    batch_repeat *= 4;
-                }
+            double t1 = ncnn::get_current_time();
 
-                batch_repeat = std::min(batch_repeat, max_batch_repeat);
-            }
+            double time = t1 - t0;
 
-            double gbps = (double)buffer_size * batch_repeat / time / 1000000;
+            double gbps = buffer_size / time / 1000000;
 
             // fprintf(stderr, "%f gbps\n", gbps);
 
@@ -2496,7 +2438,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = 3;
+        const int cmd_loop = 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2504,43 +2446,20 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
             staging_allocator->flush(devbuf.data);
             memset(hostptr, 0, buffer_size);
 
-            int batch_repeat = 1;
-            double time = 0.f;
-            int probe_step = 0;
-            while (1)
-            {
-                // time this batch
-                double t0 = ncnn::get_current_time();
+            ncnn::sleep(100);
 
-                for (int j = 0; j < batch_repeat; j++)
-                {
-                    staging_allocator->invalidate(devbuf.data);
-                    memcpy(hostptr, devptr, buffer_size);
-                }
+            // time this
+            double t0 = ncnn::get_current_time();
 
-                double t1 = ncnn::get_current_time();
+            staging_allocator->invalidate(devbuf.data);
 
-                time = t1 - t0;
-                probe_step++;
-                bool done = time >= min_time_ms || batch_repeat >= max_batch_repeat;
-                log_copy_probe(i + 1, probe_step, batch_repeat, time, done);
-                if (done)
-                    break;
+            memcpy(hostptr, devptr, buffer_size);
 
-                if (time > 0.0)
-                {
-                    int next_repeat = (int)((target_time_ms / time) * batch_repeat);
-                    batch_repeat = std::max(batch_repeat + 1, next_repeat);
-                }
-                else
-                {
-                    batch_repeat *= 4;
-                }
+            double t1 = ncnn::get_current_time();
 
-                batch_repeat = std::min(batch_repeat, max_batch_repeat);
-            }
+            double time = t1 - t0;
 
-            double gbps = (double)buffer_size * batch_repeat / time / 1000000;
+            double gbps = buffer_size / time / 1000000;
 
             // fprintf(stderr, "%f gbps\n", gbps);
 
@@ -2553,56 +2472,31 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         ncnn::VkMat a(1, buffer_size, 1, allocator);
         ncnn::VkMat b(1, buffer_size, 1, allocator);
 
-        const int cmd_loop = 3;
+        const int cmd_loop = 50;
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            int batch_repeat = 1;
-            double time = 0.f;
-            int probe_step = 0;
-            while (1)
+            // encode command
+            ncnn::VkCompute cmd(vkdev);
+
+            cmd.record_clone(a, b, opt);
+
+            // time this
+            double t0 = ncnn::get_current_time();
+
+            int ret = cmd.submit_and_wait();
+            if (ret != 0)
             {
-                // time this batch
-                double t0 = ncnn::get_current_time();
-
-                for (int j = 0; j < batch_repeat; j++)
-                {
-                    // encode command
-                    ncnn::VkCompute cmd(vkdev);
-                    cmd.record_clone(a, b, opt);
-
-                    int ret = cmd.submit_and_wait();
-                    if (ret != 0)
-                    {
-                        vkdev->reclaim_staging_allocator(staging_allocator);
-                        vkdev->reclaim_blob_allocator(allocator);
-                        return 0;
-                    }
-                }
-
-                double t1 = ncnn::get_current_time();
-
-                time = t1 - t0;
-                probe_step++;
-                bool done = time >= min_time_ms || batch_repeat >= max_batch_repeat;
-                log_copy_probe(i + 1, probe_step, batch_repeat, time, done);
-                if (done)
-                    break;
-
-                if (time > 0.0)
-                {
-                    int next_repeat = (int)((target_time_ms / time) * batch_repeat);
-                    batch_repeat = std::max(batch_repeat + 1, next_repeat);
-                }
-                else
-                {
-                    batch_repeat *= 4;
-                }
-
-                batch_repeat = std::min(batch_repeat, max_batch_repeat);
+                vkdev->reclaim_staging_allocator(staging_allocator);
+                vkdev->reclaim_blob_allocator(allocator);
+                return 0;
             }
 
-            double gbps = (double)buffer_size * batch_repeat / time / 1000000;
+            double t1 = ncnn::get_current_time();
+
+            double time = t1 - t0;
+
+            double gbps = buffer_size / time / 1000000;
 
             // fprintf(stderr, "%f gbps\n", gbps);
 
