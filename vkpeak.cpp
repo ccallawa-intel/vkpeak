@@ -2322,7 +2322,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
     return max_gflops;
 }
 
-static double vkpeak_copy(int device_id, int from_type, int to_type)
+static double vkpeak_copy(int device_id, int from_type, int to_type, int fixed_copy_iterations)
 {
     ncnn::VulkanDevice* vkdev = ncnn::get_gpu_device(device_id);
 
@@ -2367,7 +2367,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         ncnn::Mat a(1, buffer_size, 1);
         ncnn::Mat b(1, buffer_size, 1);
 
-        const int cmd_loop = 10;
+        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2401,7 +2401,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = 10;
+        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2438,7 +2438,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = 10;
+        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2472,7 +2472,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         ncnn::VkMat a(1, buffer_size, 1, allocator);
         ncnn::VkMat b(1, buffer_size, 1, allocator);
 
-        const int cmd_loop = 50;
+        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 50;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2617,6 +2617,7 @@ static void print_usage(const char* prog, const benchmark_scenario_t* scenarios,
     fprintf(stderr, "  --loop <count>                   Fixed shader loop count (>0)\n");
     fprintf(stderr, "  --invocation-count <count>       Fixed invocation count (>0)\n");
     fprintf(stderr, "  --invocations <count>            Alias of --invocation-count\n");
+    fprintf(stderr, "  --copy-iterations <count>        Fixed copy benchmark iterations (>0)\n");
     fprintf(stderr, "  -h, --help                       Show this help\n");
     print_available_scenarios(scenarios, scenario_count);
 }
@@ -2691,6 +2692,7 @@ int main(int argc, char** argv)
 
     int fixed_loop = -1;
     int fixed_invocation_count = -1;
+    int fixed_copy_iterations = -1;
 
     std::vector<const char*> positional_args;
     for (int i = 1; i < argc; i++)
@@ -2739,6 +2741,23 @@ int main(int argc, char** argv)
         if (strcmp(arg, "--invocation-count") == 0 || strcmp(arg, "--invocations") == 0)
         {
             if (i + 1 >= argc || !parse_positive_int_arg(arg, argv[i + 1], fixed_invocation_count))
+                return -1;
+
+            i++;
+            continue;
+        }
+
+        if (strncmp(arg, "--copy-iterations=", 18) == 0)
+        {
+            if (!parse_positive_int_arg("--copy-iterations", arg + 18, fixed_copy_iterations))
+                return -1;
+
+            continue;
+        }
+
+        if (strcmp(arg, "--copy-iterations") == 0)
+        {
+            if (i + 1 >= argc || !parse_positive_int_arg("--copy-iterations", argv[i + 1], fixed_copy_iterations))
                 return -1;
 
             i++;
@@ -2826,6 +2845,10 @@ int main(int argc, char** argv)
     {
         fprintf(stderr, "fixed invoke = %d\n", fixed_invocation_count);
     }
+    if (fixed_copy_iterations > 0)
+    {
+        fprintf(stderr, "copy iters   = %d\n", fixed_copy_iterations);
+    }
 
     std::set<std::string> selected_scenarios;
     if (scenario_arg_ptr)
@@ -2887,7 +2910,7 @@ int main(int argc, char** argv)
         if (!selected_scenarios.empty() && selected_scenarios.count(scenario.name) == 0)
             continue;
 
-        const double score = scenario.is_copy ? vkpeak_copy(device_id, scenario.arg0, scenario.arg1) : vkpeak(device_id, scenario.arg0, scenario.arg1, scenario.arg2, fixed_loop, fixed_invocation_count);
+        const double score = scenario.is_copy ? vkpeak_copy(device_id, scenario.arg0, scenario.arg1, fixed_copy_iterations) : vkpeak(device_id, scenario.arg0, scenario.arg1, scenario.arg2, fixed_loop, fixed_invocation_count);
         fprintf(stdout, "%-12s = %.2f %s\n", scenario.name, score, scenario.unit);
     }
 
