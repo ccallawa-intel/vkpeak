@@ -2362,36 +2362,36 @@ static double vkpeak_copy(int device_id, int from_type, int to_type, int fixed_c
 
     double max_gbps = 0;
 
+    const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
     if (from_type == 0 && to_type == 0)
     {
         ncnn::Mat a(1, buffer_size, 1);
         ncnn::Mat b(1, buffer_size, 1);
 
-        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
+
+        // reset cache
+        memset(a, 0, buffer_size);
+
+        ncnn::sleep(100);
+
+        // time this
+        double t0 = ncnn::get_current_time();
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // reset cache
-            memset(a, 0, buffer_size);
-
-            ncnn::sleep(100);
-
-            // time this
-            double t0 = ncnn::get_current_time();
-
             memcpy(b, a, buffer_size);
-
-            double t1 = ncnn::get_current_time();
-
-            double time = t1 - t0;
-
-            double gbps = buffer_size / time / 1000000;
-
-            // fprintf(stderr, "%f gbps\n", gbps);
-
-            if (gbps > max_gbps)
-                max_gbps = gbps;
         }
+
+        double t1 = ncnn::get_current_time();
+
+        double time = t1 - t0;
+
+        double gbps = (buffer_size * cmd_loop) / time / 1000000;
+
+        // fprintf(stderr, "%f gbps\n", gbps);
+
+        if (gbps > max_gbps)
+            max_gbps = gbps;
     }
     if (from_type == 0 && to_type == 1)
     {
@@ -2401,34 +2401,32 @@ static double vkpeak_copy(int device_id, int from_type, int to_type, int fixed_c
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
+        // reset cache
+        memset(hostptr, 0, buffer_size);
+        staging_allocator->invalidate(devbuf.data);
+
+        ncnn::sleep(100);
+
+        // time this
+        double t0 = ncnn::get_current_time();
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // reset cache
-            memset(hostptr, 0, buffer_size);
-            staging_allocator->invalidate(devbuf.data);
-
-            ncnn::sleep(100);
-
-            // time this
-            double t0 = ncnn::get_current_time();
-
             memcpy(devptr, hostptr, buffer_size);
-
-            staging_allocator->flush(devbuf.data);
-
-            double t1 = ncnn::get_current_time();
-
-            double time = t1 - t0;
-
-            double gbps = buffer_size / time / 1000000;
-
-            // fprintf(stderr, "%f gbps\n", gbps);
-
-            if (gbps > max_gbps)
-                max_gbps = gbps;
         }
+
+        staging_allocator->flush(devbuf.data);
+
+        double t1 = ncnn::get_current_time();
+
+        double time = t1 - t0;
+
+        double gbps = (buffer_size * cmd_loop) / time / 1000000;
+
+        // fprintf(stderr, "%f gbps\n", gbps);
+
+        if (gbps > max_gbps)
+            max_gbps = gbps;
     }
     if (from_type == 1 && to_type == 0)
     {
@@ -2438,70 +2436,67 @@ static double vkpeak_copy(int device_id, int from_type, int to_type, int fixed_c
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 10;
+        // reset cache
+        staging_allocator->flush(devbuf.data);
+        memset(hostptr, 0, buffer_size);
+
+        ncnn::sleep(100);
+
+        // time this
+        double t0 = ncnn::get_current_time();
+
+        staging_allocator->invalidate(devbuf.data);
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // reset cache
-            staging_allocator->flush(devbuf.data);
-            memset(hostptr, 0, buffer_size);
-
-            ncnn::sleep(100);
-
-            // time this
-            double t0 = ncnn::get_current_time();
-
-            staging_allocator->invalidate(devbuf.data);
-
             memcpy(hostptr, devptr, buffer_size);
-
-            double t1 = ncnn::get_current_time();
-
-            double time = t1 - t0;
-
-            double gbps = buffer_size / time / 1000000;
-
-            // fprintf(stderr, "%f gbps\n", gbps);
-
-            if (gbps > max_gbps)
-                max_gbps = gbps;
         }
+
+        double t1 = ncnn::get_current_time();
+
+        double time = t1 - t0;
+
+        double gbps = (buffer_size * cmd_loop) / time / 1000000;
+
+        // fprintf(stderr, "%f gbps\n", gbps);
+
+        if (gbps > max_gbps)
+            max_gbps = gbps;
     }
     if (from_type == 1 && to_type == 1)
     {
         ncnn::VkMat a(1, buffer_size, 1, allocator);
         ncnn::VkMat b(1, buffer_size, 1, allocator);
 
-        const int cmd_loop = fixed_copy_iterations > 0 ? fixed_copy_iterations : 50;
+        // encode command
+        ncnn::VkCompute cmd(vkdev);
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // encode command
-            ncnn::VkCompute cmd(vkdev);
-
             cmd.record_clone(a, b, opt);
+        }
 
-            // time this
-            double t0 = ncnn::get_current_time();
+        // time this
+        double t0 = ncnn::get_current_time();
 
-            int ret = cmd.submit_and_wait();
-            if (ret != 0)
-            {
-                vkdev->reclaim_staging_allocator(staging_allocator);
-                vkdev->reclaim_blob_allocator(allocator);
-                return 0;
-            }
+        int ret = cmd.submit_and_wait();
+        if (ret != 0)
+        {
+            vkdev->reclaim_staging_allocator(staging_allocator);
+            vkdev->reclaim_blob_allocator(allocator);
+            return 0;
+        }
 
-            double t1 = ncnn::get_current_time();
+        double t1 = ncnn::get_current_time();
 
-            double time = t1 - t0;
+        double time = t1 - t0;
 
-            double gbps = buffer_size / time / 1000000;
+        double gbps = (buffer_size * cmd_loop) / time / 1000000;
 
-            // fprintf(stderr, "%f gbps\n", gbps);
+        // fprintf(stderr, "%f gbps\n", gbps);
 
-            if (gbps > max_gbps)
-                max_gbps = gbps;
+        if (gbps > max_gbps)
+            max_gbps = gbps;
         }
     }
 
