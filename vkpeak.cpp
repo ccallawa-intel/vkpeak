@@ -2497,7 +2497,6 @@ static double vkpeak_copy(int device_id, int from_type, int to_type, int fixed_c
 
         if (gbps > max_gbps)
             max_gbps = gbps;
-        }
     }
 
     vkdev->reclaim_staging_allocator(staging_allocator);
