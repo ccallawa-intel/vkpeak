@@ -1468,7 +1468,7 @@ void main()
 }
 )";
 
-static double vkpeak(int device_id, int storage_type, int arithmetic_type, int packing_type)
+static double vkpeak(int device_id, int storage_type, int arithmetic_type, int packing_type, int cmd_loop)
 {
     ncnn::VulkanDevice* vkdev = ncnn::get_gpu_device(device_id);
 
@@ -2153,8 +2153,6 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
             }
         }
 
-        const int cmd_loop = 6;
-
         for (int i = 0; i < cmd_loop; i++)
         {
             // encode command
@@ -2281,7 +2279,7 @@ static double vkpeak(int device_id, int storage_type, int arithmetic_type, int p
     return max_gflops;
 }
 
-static double vkpeak_copy(int device_id, int from_type, int to_type)
+static double vkpeak_copy(int device_id, int from_type, int to_type, int cmd_loop)
 {
     ncnn::VulkanDevice* vkdev = ncnn::get_gpu_device(device_id);
 
@@ -2326,8 +2324,6 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         ncnn::Mat a(1, buffer_size, 1);
         ncnn::Mat b(1, buffer_size, 1);
 
-        const int cmd_loop = 10;
-
         for (int i = 0; i < cmd_loop; i++)
         {
             // reset cache
@@ -2359,8 +2355,6 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
 
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
-
-        const int cmd_loop = 10;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2397,8 +2391,6 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
         void* devptr = devbuf.mapped_ptr();
         void* hostptr = hostbuf.data;
 
-        const int cmd_loop = 10;
-
         for (int i = 0; i < cmd_loop; i++)
         {
             // reset cache
@@ -2430,8 +2422,6 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
     {
         ncnn::VkMat a(1, buffer_size, 1, allocator);
         ncnn::VkMat b(1, buffer_size, 1, allocator);
-
-        const int cmd_loop = 50;
 
         for (int i = 0; i < cmd_loop; i++)
         {
@@ -2570,8 +2560,12 @@ static void print_available_scenarios(const benchmark_scenario_t* scenarios, siz
 
 static void print_usage(const char* prog, const benchmark_scenario_t* scenarios, size_t scenario_count)
 {
-    fprintf(stderr, "Usage: %s [device_id] [scenario|scenario1,scenario2,...]\n", prog);
-    fprintf(stderr, "       %s [scenario|scenario1,scenario2,...]\n", prog);
+    fprintf(stderr, "Usage: %s [device_id] [scenario|scenario1,scenario2,...] [cmd_loop]\n", prog);
+    fprintf(stderr, "       %s [scenario|scenario1,scenario2,...] [cmd_loop]\n", prog);
+    fprintf(stderr, "       %s [cmd_loop]\n", prog);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "  device_id: GPU device ID (default: 0)\n");
+    fprintf(stderr, "  cmd_loop:  Number of command buffer loop iterations (default: 10)\n");
     print_available_scenarios(scenarios, scenario_count);
 }
 
@@ -2621,7 +2615,7 @@ int main(int argc, char** argv)
     };
     const size_t scenario_count = sizeof(scenarios) / sizeof(scenarios[0]);
 
-    if (argc > 3)
+    if (argc > 4)
     {
         print_usage(argv[0], scenarios, scenario_count);
         return -1;
@@ -2639,39 +2633,80 @@ int main(int argc, char** argv)
 
     int device_id = 0;
     const char* scenario_arg_ptr = 0;
+    int cmd_loop = 10;
 
-    if (argc >= 2)
+    // Parse command line arguments
+    int arg_idx = 1;
+
+    // Try to parse first argument as device_id
+    if (argc > arg_idx)
     {
         char* endptr = 0;
         errno = 0;
-        long parsed_device_id = strtol(argv[1], &endptr, 10);
-        if (*argv[1] != '\0' && endptr && *endptr == '\0')
+        long parsed_device_id = strtol(argv[arg_idx], &endptr, 10);
+        if (*argv[arg_idx] != '\0' && endptr && *endptr == '\0')
         {
-            /* try to parse first argument as device id */
+            // First argument is numeric, treat as device_id
             if (errno == ERANGE || parsed_device_id < std::numeric_limits<int>::min() || parsed_device_id > std::numeric_limits<int>::max())
             {
-                fprintf(stderr, "Invalid device_id %s\n", argv[1]);
+                fprintf(stderr, "Invalid device_id %s\n", argv[arg_idx]);
                 ncnn::destroy_gpu_instance();
                 return -1;
             }
-
             device_id = (int)parsed_device_id;
-            if (argc == 3)
+            arg_idx++;
+        }
+    }
+
+    // Parse scenario argument if present
+    if (argc > arg_idx)
+    {
+        // Check if this is a numeric argument (cmd_loop) or scenario name
+        char* endptr = 0;
+        errno = 0;
+        long parsed_cmd_loop = strtol(argv[arg_idx], &endptr, 10);
+        if (*argv[arg_idx] != '\0' && endptr && *endptr == '\0' && parsed_cmd_loop > 0)
+        {
+            // This is a cmd_loop value, parse it
+            if (errno == ERANGE || parsed_cmd_loop > std::numeric_limits<int>::max())
             {
-                scenario_arg_ptr = argv[2];
+                fprintf(stderr, "Invalid cmd_loop %s\n", argv[arg_idx]);
+                ncnn::destroy_gpu_instance();
+                return -1;
             }
+            cmd_loop = (int)parsed_cmd_loop;
+            arg_idx++;
         }
         else
         {
-            /* parse first argument as scenario list specifier */
-            scenario_arg_ptr = argv[1];
-            if (argc >= 3)
+            // This is scenario specification
+            scenario_arg_ptr = argv[arg_idx];
+            arg_idx++;
+        }
+    }
+
+    // Parse remaining cmd_loop argument if present
+    if (argc > arg_idx)
+    {
+        char* endptr = 0;
+        errno = 0;
+        long parsed_cmd_loop = strtol(argv[arg_idx], &endptr, 10);
+        if (*argv[arg_idx] != '\0' && endptr && *endptr == '\0' && parsed_cmd_loop > 0)
+        {
+            if (errno == ERANGE || parsed_cmd_loop > std::numeric_limits<int>::max())
             {
-                /* extra, invalid arguments supplied; program cannot continue */
-                print_usage(argv[0], scenarios, scenario_count);
+                fprintf(stderr, "Invalid cmd_loop %s\n", argv[arg_idx]);
                 ncnn::destroy_gpu_instance();
                 return -1;
             }
+            cmd_loop = (int)parsed_cmd_loop;
+        }
+        else
+        {
+            fprintf(stderr, "Invalid argument %s\n", argv[arg_idx]);
+            print_usage(argv[0], scenarios, scenario_count);
+            ncnn::destroy_gpu_instance();
+            return -1;
         }
     }
 
@@ -2752,7 +2787,7 @@ int main(int argc, char** argv)
         if (!selected_scenarios.empty() && selected_scenarios.count(scenario.name) == 0)
             continue;
 
-        const double score = scenario.is_copy ? vkpeak_copy(device_id, scenario.arg0, scenario.arg1) : vkpeak(device_id, scenario.arg0, scenario.arg1, scenario.arg2);
+        const double score = scenario.is_copy ? vkpeak_copy(device_id, scenario.arg0, scenario.arg1, cmd_loop) : vkpeak(device_id, scenario.arg0, scenario.arg1, scenario.arg2, cmd_loop);
         fprintf(stdout, "%-12s = %.2f %s\n", scenario.name, score, scenario.unit);
     }
 
