@@ -2383,7 +2383,7 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
 
             double gbps = buffer_size / time / 1000000;
 
-            // fprintf(stderr, "%f gbps\n", gbps);
+            fprintf(stderr, "%f gbps\n", gbps);
 
             if (gbps > max_gbps)
                 max_gbps = gbps;
