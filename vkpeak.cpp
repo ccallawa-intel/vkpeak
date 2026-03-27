@@ -2304,13 +2304,13 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
 
     bool d2d = from_type == 1 && to_type == 1;
 
-    // devbuf max 512M for host and 2G for d2d
-    size_t buffer_size = std::min((size_t)vkdev->get_heap_budget() / 8, d2d ? (size_t)2048 : (size_t)512) * 1024 * 1024;
-    if (vkdev->info.type() == 1)
-    {
-        // max 128M for integrated gpu
-        buffer_size = std::min(buffer_size, (size_t)128 * 1024 * 1024);
-    }
+    // devbuf max 2G for host and 8G for d2d
+    size_t buffer_size = std::min((size_t)vkdev->get_heap_budget() / 8, d2d ? (size_t)8192 : (size_t)2048) * 1024 * 1024;
+    // if (vkdev->info.type() == 1)
+    // {
+    //     // max 2G for integrated gpu
+    //     buffer_size = std::min(buffer_size, (size_t)2048 * 1024 * 1024);
+    // }
 
     // sanitize buffer_size for 0.9x hardware limits
     {
