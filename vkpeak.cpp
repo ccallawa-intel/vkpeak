@@ -6,7 +6,6 @@
 #include <mat.h>
 
 #include <cerrno>
-#include <cstdlib>
 #include <limits>
 #include <set>
 #include <vector>
@@ -2331,10 +2330,8 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // reset cache with random values
-            for (size_t j = 0; j < buffer_size; j++) {
-                ((uint8_t*)a)[j] = (uint8_t)(rand() % 256);
-            }
+            // reset cache
+            memset(a, 0, buffer_size);
 
             ncnn::sleep(100);
 
@@ -2367,10 +2364,8 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // reset cache with random values
-            for (size_t j = 0; j < buffer_size; j++) {
-                ((uint8_t*)hostptr)[j] = (uint8_t)(rand() % 256);
-            }
+            // reset cache
+            memset(hostptr, 0, buffer_size);
             staging_allocator->invalidate(devbuf.data);
 
             ncnn::sleep(100);
@@ -2406,11 +2401,9 @@ static double vkpeak_copy(int device_id, int from_type, int to_type)
 
         for (int i = 0; i < cmd_loop; i++)
         {
-            // reset cache with random values
+            // reset cache
             staging_allocator->flush(devbuf.data);
-            for (size_t j = 0; j < buffer_size; j++) {
-                ((uint8_t*)hostptr)[j] = (uint8_t)(rand() % 256);
-            }
+            memset(hostptr, 0, buffer_size);
 
             ncnn::sleep(100);
 
